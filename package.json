@@ -1,0 +1,20 @@
+{
+  "name": "omyxia-service-erp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Omyxia ERP Microservice (Accounting, GL, AP, AR, Tax, Ledger)",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push"
+  },
+  "devDependencies": {
+    "prisma": "^5.22.0",
+    "turbo": "^2.1.0",
+    "typescript": "^5.4.5"
+  },
+  "packageManager": "pnpm@10.33.2"
+}

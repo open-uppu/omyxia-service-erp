@@ -1,0 +1,252 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+enum NormalBalance {
+  DEBIT
+  CREDIT
+}
+
+enum JournalStatus {
+  DRAFT
+  REVIEW
+  POSTED
+  REVERSED
+}
+
+enum FiscalPeriodStatus {
+  OPEN
+  CLOSED
+  LOCKED
+}
+
+enum TaxType {
+  VAT
+  OUTPUT_VAT
+  INPUT_VAT
+  WHT_1
+  WHT_2
+  WHT_3
+  WHT_5
+  STAMP_DUTY
+}
+
+enum ArInvoiceStatus {
+  DRAFT
+  SENT
+  PARTIAL
+  PAID
+  OVERDUE
+  VOID
+}
+
+enum ApBillStatus {
+  DRAFT
+  APPROVED
+  PARTIAL
+  PAID
+  OVERDUE
+  VOID
+}
+
+model ChartOfAccounts {
+  id            String        @id @default(cuid())
+  tenantId      String
+  code          String
+  name          String
+  type          AccountType
+  normalBalance NormalBalance @default(DEBIT)
+  parentId      String?
+  currency      String        @default("THB")
+  isActive      Boolean       @default(true)
+  isPostable    Boolean       @default(true)
+  path          String        @default("/")
+  createdAt     DateTime      @default(now()) @db.Timestamp(6)
+  updatedAt     DateTime      @default(now()) @updatedAt @db.Timestamp(6)
+  JournalLine   JournalLine[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId], map: "idx_account_tenant")
+  @@index([tenantId, parentId], map: "idx_account_tenant_parent")
+  @@index([tenantId, type], map: "idx_account_tenant_type")
+}
+
+model JournalEntry {
+  id          String        @id @default(cuid())
+  tenantId    String
+  entryNo     String
+  date        DateTime      @db.Timestamp(6)
+  description String
+  reference   String?
+  status      JournalStatus @default(DRAFT)
+  approvedBy  String?
+  approvedAt  DateTime?     @db.Timestamp(6)
+  createdAt   DateTime      @default(now()) @db.Timestamp(6)
+  updatedAt   DateTime      @default(now()) @updatedAt @db.Timestamp(6)
+  lines       JournalLine[]
+
+  @@unique([tenantId, entryNo])
+  @@index([tenantId], map: "idx_journal_tenant")
+  @@index([tenantId, date], map: "idx_journal_tenant_date")
+  @@index([tenantId, status], map: "idx_journal_tenant_status")
+}
+
+model JournalLine {
+  id              String          @id @default(cuid())
+  tenantId        String
+  entryId         String
+  accountId       String
+  debit           Decimal         @default(0) @db.Decimal(15, 2)
+  credit          Decimal         @default(0) @db.Decimal(15, 2)
+  description     String?
+  costCenter      String?
+  project         String?
+  createdAt       DateTime        @default(now()) @db.Timestamp(6)
+  ChartOfAccounts ChartOfAccounts @relation(fields: [accountId], references: [id], onUpdate: NoAction)
+  entry           JournalEntry    @relation(fields: [entryId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([entryId], map: "idx_journal_line_entry")
+  @@index([tenantId], map: "idx_journal_line_tenant")
+}
+
+model FiscalPeriod {
+  id        String             @id @default(cuid())
+  tenantId  String
+  startDate DateTime           @db.Timestamp(6)
+  endDate   DateTime           @db.Timestamp(6)
+  status    FiscalPeriodStatus @default(OPEN)
+  closedAt  DateTime?          @db.Timestamp(6)
+  closedBy  String?
+  createdAt DateTime           @default(now()) @db.Timestamp(6)
+
+  @@unique([tenantId, startDate])
+  @@index([tenantId], map: "idx_fiscal_tenant")
+}
+
+model TaxRate {
+  id             String           @id @default(cuid())
+  tenantId       String
+  type           TaxType
+  name           String
+  rate           Decimal          @db.Decimal(5, 2)
+  effectiveFrom  DateTime         @db.Timestamp(6)
+  effectiveTo    DateTime?        @db.Timestamp(6)
+  createdAt      DateTime         @default(now()) @db.Timestamp(6)
+  TaxTransaction TaxTransaction[]
+
+  @@unique([tenantId, type, effectiveFrom])
+  @@index([tenantId], map: "idx_tax_rate_tenant")
+}
+
+model TaxTransaction {
+  id            String    @id @default(cuid())
+  tenantId      String
+  taxRateId     String
+  sourceType    String
+  sourceId      String
+  baseAmount    Decimal   @db.Decimal(15, 2)
+  taxAmount     Decimal   @db.Decimal(15, 2)
+  certificateNo String?
+  filedAt       DateTime? @db.Timestamp(6)
+  createdAt     DateTime  @default(now()) @db.Timestamp(6)
+  TaxRate       TaxRate   @relation(fields: [taxRateId], references: [id], onUpdate: NoAction)
+
+  @@index([tenantId, sourceType, sourceId], map: "idx_tax_tx_source")
+  @@index([tenantId], map: "idx_tax_tx_tenant")
+}
+
+model Vendor {
+  id            String    @id @default(cuid())
+  tenantId      String
+  code          String
+  name          String
+  taxId         String?
+  email         String?
+  phone         String?
+  address       String?
+  paymentTerms  Int       @default(30)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt     DateTime  @default(now()) @updatedAt @db.Timestamp(6)
+  bills         ApBill[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId], map: "idx_vendor_tenant")
+}
+
+model Customer {
+  id           String      @id @default(cuid())
+  tenantId     String
+  code         String
+  name         String
+  taxId        String?
+  email        String?
+  phone        String?
+  address      String?
+  creditLimit  Decimal     @default(0) @db.Decimal(15, 2)
+  paymentTerms Int         @default(30)
+  isActive     Boolean     @default(true)
+  createdAt    DateTime    @default(now()) @db.Timestamp(6)
+  updatedAt    DateTime    @default(now()) @updatedAt @db.Timestamp(6)
+  invoices     ArInvoice[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId], map: "idx_customer_tenant")
+}
+
+model ArInvoice {
+  id          String          @id @default(cuid())
+  tenantId    String
+  customerId  String?
+  invoiceNo   String
+  invoiceDate DateTime        @db.Timestamp(6)
+  dueDate     DateTime        @db.Timestamp(6)
+  subtotal    Decimal         @db.Decimal(15, 2)
+  taxAmount   Decimal         @default(0) @db.Decimal(15, 2)
+  total       Decimal         @db.Decimal(15, 2)
+  paidAmount  Decimal         @default(0) @db.Decimal(15, 2)
+  status      ArInvoiceStatus @default(DRAFT)
+  notes       String?
+  createdAt   DateTime        @default(now()) @db.Timestamp(6)
+  updatedAt   DateTime        @default(now()) @updatedAt @db.Timestamp(6)
+  customer    Customer?       @relation(fields: [customerId], references: [id], onUpdate: NoAction)
+
+  @@unique([tenantId, invoiceNo])
+  @@index([tenantId], map: "idx_ar_tenant")
+  @@index([tenantId, status], map: "idx_ar_tenant_status")
+}
+
+model ApBill {
+  id         String       @id @default(cuid())
+  tenantId   String
+  vendorId   String
+  billNo     String
+  billDate   DateTime     @db.Timestamp(6)
+  dueDate    DateTime     @db.Timestamp(6)
+  subtotal   Decimal      @db.Decimal(15, 2)
+  taxAmount  Decimal      @default(0) @db.Decimal(15, 2)
+  whtAmount  Decimal      @default(0) @db.Decimal(15, 2)
+  total      Decimal      @db.Decimal(15, 2)
+  paidAmount Decimal      @default(0) @db.Decimal(15, 2)
+  status     ApBillStatus @default(DRAFT)
+  notes      String?
+  createdAt  DateTime     @default(now()) @db.Timestamp(6)
+  updatedAt  DateTime     @default(now()) @updatedAt @db.Timestamp(6)
+  vendor     Vendor       @relation(fields: [vendorId], references: [id], onUpdate: NoAction)
+
+  @@unique([tenantId, billNo])
+  @@index([tenantId], map: "idx_ap_tenant")
+}
